@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import sys, os, itertools, logging
+import re
 import sqlite3 as sqlite
 
 import xlrd
@@ -19,6 +20,9 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.ERROR)
 #log.setLevel(logging.DEBUG)
 
+# Regexp to split the colname, type and key arguments
+# (colname with space) (type) (primary key asc)
+re_col_type = re.compile("^(.*)\s+(integer|float|string)\s*(.*)$")
 
 def xls2db(infile, outfile=None, column_name_start_row=0, data_start_row=1):
     """
@@ -58,12 +62,34 @@ def xls2db(infile, outfile=None, column_name_start_row=0, data_start_row=1):
             column_names = []
             for j in range(s.ncols):
                 # FIXME TODO deal with embedded double quotes
-                colname = s.cell(column_name_start_row, j).value
                 if colname:
-                    colname = '"c%d"' % (colname,) if isinstance(colname, float) else \
-                              u'"%s"' % (colname,)
+                    if isinstance(colname, float):
+                        colname = '"c%d"' % (colname,)
+                    else:
+                        re_match = re_col_type.match(colname)
+
+                        if not re_match:
+                            colname = colname = '"%s"' % (colname)
+
+                        else:
+                            colname, coltype, colkey = re_match.groups()
+
+                            # FIXME raise an exception if already used by user
+                            if not colname:
+                                colname = '"col%d"' % (j + 1,)
+                            else:
+                                colname = '"%s"' % (colname)
+
+                            if coltype:
+                                colname += " " + coltype
+
+                            if colkey:
+                                colname += " " + colkey
                 else:
+                    # FIXME raise an exception if already used by user
                     colname = '"col%d"' % (j + 1,)
+
+
                 # FIXME TODO deal with embedded spaces in names
                 # (requires delimited identifiers) and missing column types
                 column_names.append(colname)
